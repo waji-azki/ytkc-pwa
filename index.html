@@ -16,7 +16,7 @@
   </header>
   <main>
     <div class="add-box">
-      <input id="urlInput" type="text" placeholder="YouTubeのURLを貼り付け(共有からでもOK)">
+      <input id="urlInput" type="text" placeholder="YouTubeのURLを貼り付け(同時視聴で記録を開始)">
       <button id="addBtn">追加</button>
     </div>
     <div id="list"></div>
@@ -82,7 +82,7 @@
   document.getElementById('addBtn').addEventListener('click', () => {
     const val = document.getElementById('urlInput').value.trim();
     if (!val) return;
-    location.href = 'share.html?text=' + encodeURIComponent(val);
+    location.href = 'watch.html?text=' + encodeURIComponent(val);
   });
   document.getElementById('urlInput').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') document.getElementById('addBtn').click();

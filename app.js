@@ -3,7 +3,12 @@ window.YTKC = (function () {
   'use strict';
 
   const STORAGE_KEY = 'ytkc_videos_v1';
-  const EMOJIS = ['😂', '🤣', '😭', '😳', '👏', '🔥', '❤️', '😱', '🤔', '💀', '草', 'それな'];
+  const EMOJIS = [
+    '😂', '🤣', '😭', '😳', '😱', '😅', '😆', '😢', '😡', '😍', '🥺', '👏',
+    '🙌', '🔥', '💯', '❤️', '💦', '💀', '😴', '🎉', '✨', '😇', '🤯', '😤',
+    '🫠', '🙏', '👍', '👎', '✅', '❓', '❗', '😏', '🫡', '😬', '🤝', '💪',
+    '😹', '🥹', '😮', '草', 'それな', '尊い', '神', 'わかる',
+  ];
 
   // ---------- ストレージ ----------
 
@@ -196,6 +201,36 @@ window.YTKC = (function () {
     return `https://www.youtube.com/watch?v=${videoId}&t=${sec}s`;
   }
 
+  function buildEmbedOrigin() {
+    try {
+      return location.origin;
+    } catch (e) {
+      return '';
+    }
+  }
+
+  // ---------- 「同時視聴」タイマーの状態(タイマー方式で使用) ----------
+  // ページを離れて戻ってきたときにある程度復元できるよう保存しておく
+
+  function getCounterState(videoId) {
+    const v = getVideo(videoId);
+    return v && v.counter ? v.counter : null;
+  }
+
+  function setCounterState(videoId, state) {
+    const all = loadAll();
+    if (!all[videoId]) {
+      all[videoId] = { videoId, title: null, thumbnail: null, lastWatchedAt: 0, updatedAt: Date.now(), entries: [] };
+    }
+    all[videoId].counter = state;
+    all[videoId].updatedAt = Date.now();
+    saveAll(all);
+  }
+
+  function clearCounterState(videoId) {
+    setCounterState(videoId, null);
+  }
+
   // ---------- YouTube oEmbed(タイトル・サムネ取得。失敗しても無視) ----------
 
   async function fetchOEmbed(videoId) {
@@ -252,6 +287,10 @@ window.YTKC = (function () {
     secondsToInputString,
     extractYoutubeInfo,
     buildWatchUrl,
+    buildEmbedOrigin,
+    getCounterState,
+    setCounterState,
+    clearCounterState,
     fetchOEmbed,
     buildExportText,
     registerSW,

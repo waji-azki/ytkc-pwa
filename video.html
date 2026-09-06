@@ -56,12 +56,27 @@
 
       <div class="watch-banner">
         <span>前回はここまで視聴: ${YTKC.formatTime(video.lastWatchedAt)}</span>
-        <a href="${YTKC.buildWatchUrl(videoId, video.lastWatchedAt)}" target="_blank" rel="noopener">続きを開く</a>
+        <span style="display:flex; gap:10px;">
+          <a href="watch.html?id=${encodeURIComponent(videoId)}">続きから計測</a>
+          <a href="${YTKC.buildWatchUrl(videoId, video.lastWatchedAt)}" target="_blank" rel="noopener">YouTubeで開く</a>
+        </span>
       </div>
 
       <div class="log" id="log"></div>
 
-      <div class="emoji-grid" id="emojiGrid"></div>
+      <div class="time-row">
+        再生時刻:
+        <button class="stepBtn" id="timeMinus" type="button">-10s</button>
+        <input id="timeInput" type="text" value="${YTKC.secondsToInputString(video.lastWatchedAt)}">
+        <button class="stepBtn" id="timePlus" type="button">+10s</button>
+        <span>(mm:ss)</span>
+      </div>
+
+      <div class="emoji-toggle-row">
+        <button id="emojiToggleBtn" type="button">😊 絵文字</button>
+      </div>
+      <div class="emoji-picker" id="emojiPicker"></div>
+
       <div class="text-row">
         <input id="textInput" type="text" placeholder="感想を追記してEnter">
         <button id="sendBtn">送信</button>
@@ -87,25 +102,57 @@
 
     renderLog();
 
-    const grid = document.getElementById('emojiGrid');
+    function getCurrentT() {
+      const raw = document.getElementById('timeInput').value.trim();
+      const parts = raw.split(':').map((x) => parseInt(x, 10));
+      if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+        return parts[0] * 60 + parts[1];
+      }
+      const p = YTKC.parseTimeToken(raw);
+      return p !== null ? p : video.lastWatchedAt;
+    }
+    function setCurrentT(sec) {
+      document.getElementById('timeInput').value = YTKC.secondsToInputString(Math.max(0, sec));
+    }
+    document.getElementById('timeMinus').addEventListener('click', () => setCurrentT(getCurrentT() - 10));
+    document.getElementById('timePlus').addEventListener('click', () => setCurrentT(getCurrentT() + 10));
+
+    const emojiPicker = document.getElementById('emojiPicker');
+    const emojiToggleBtn = document.getElementById('emojiToggleBtn');
+    const textInput = document.getElementById('textInput');
+
+    function insertAtCursor(input, text) {
+      const start = input.selectionStart != null ? input.selectionStart : input.value.length;
+      const end = input.selectionEnd != null ? input.selectionEnd : input.value.length;
+      input.value = input.value.slice(0, start) + text + input.value.slice(end);
+      const pos = start + text.length;
+      input.focus();
+      input.setSelectionRange(pos, pos);
+    }
+
     YTKC.EMOJIS.forEach((em) => {
       const b = document.createElement('button');
+      b.type = 'button';
       b.textContent = em;
-      b.addEventListener('click', () => {
-        YTKC.addEntry(videoId, { t: video.lastWatchedAt, type: 'emoji', content: em });
-        showToast('追加しました');
-        render();
-      });
-      grid.appendChild(b);
+      // タップしてもピッカーは閉じない = 連続して打てる
+      b.addEventListener('click', () => insertAtCursor(textInput, em));
+      emojiPicker.appendChild(b);
+    });
+
+    emojiToggleBtn.addEventListener('click', () => {
+      const willShow = !emojiPicker.classList.contains('show');
+      emojiPicker.classList.toggle('show', willShow);
+      emojiToggleBtn.classList.toggle('active', willShow);
+      if (willShow) textInput.focus();
     });
 
     document.getElementById('sendBtn').addEventListener('click', () => {
-      const text = document.getElementById('textInput').value.trim();
+      const text = textInput.value.trim();
       if (!text) return;
-      YTKC.addEntry(videoId, { t: video.lastWatchedAt, type: 'text', content: text });
+      YTKC.addEntry(videoId, { t: getCurrentT(), type: 'text', content: text });
       render();
     });
-    document.getElementById('textInput').addEventListener('keydown', (e) => {
+    textInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') document.getElementById('sendBtn').click();
     });
 
