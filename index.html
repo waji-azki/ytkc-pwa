@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>配信感想メモ</title>
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#0f0f0f">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <h1>配信感想メモ</h1>
+  </header>
+  <main>
+    <div class="add-box">
+      <input id="urlInput" type="text" placeholder="YouTubeのURLを貼り付け(共有からでもOK)">
+      <button id="addBtn">追加</button>
+    </div>
+    <div id="list"></div>
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="app.js"></script>
+<script>
+  YTKC.registerSW();
+
+  function relativeDate(ts) {
+    if (!ts) return '';
+    const d = new Date(ts);
+    return d.getFullYear() + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + String(d.getDate()).padStart(2, '0');
+  }
+
+  function render() {
+    const list = document.getElementById('list');
+    const videos = YTKC.listVideos();
+    list.innerHTML = '';
+    if (videos.length === 0) {
+      list.innerHTML = '<div class="empty">まだ記録がありません。<br>YouTubeアプリの共有メニューからこのアプリを選ぶか、上の欄にURLを貼り付けて追加してください。</div>';
+      return;
+    }
+    videos.forEach((v) => {
+      const a = document.createElement('a');
+      a.className = 'video-card';
+      a.href = 'video.html?id=' + encodeURIComponent(v.videoId);
+
+      const img = document.createElement('img');
+      img.src = v.thumbnail || ('https://i.ytimg.com/vi/' + v.videoId + '/mqdefault.jpg');
+      img.alt = '';
+
+      const info = document.createElement('div');
+      info.className = 'info';
+      const title = document.createElement('div');
+      title.className = 'title';
+      title.textContent = v.title || v.videoId;
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+      meta.textContent = `コメント${v.entries.length}件 ・ 視聴位置 ${YTKC.formatTime(v.lastWatchedAt)} ・ ${relativeDate(v.updatedAt)}`;
+
+      info.appendChild(title);
+      info.appendChild(meta);
+      a.appendChild(img);
+      a.appendChild(info);
+      list.appendChild(a);
+
+      if (!v.title) {
+        YTKC.fetchOEmbed(v.videoId).then((meta2) => {
+          if (meta2) {
+            YTKC.updateMeta(v.videoId, meta2);
+            title.textContent = meta2.title || v.videoId;
+            if (meta2.thumbnail) img.src = meta2.thumbnail;
+          }
+        });
+      }
+    });
+  }
+
+  document.getElementById('addBtn').addEventListener('click', () => {
+    const val = document.getElementById('urlInput').value.trim();
+    if (!val) return;
+    location.href = 'share.html?text=' + encodeURIComponent(val);
+  });
+  document.getElementById('urlInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') document.getElementById('addBtn').click();
+  });
+
+  render();
+</script>
+</body>
+</html>
