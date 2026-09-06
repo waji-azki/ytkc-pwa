@@ -114,13 +114,12 @@
     timerFrozenValue = info.t || 0;
 
     main.innerHTML = `
-      <div class="card">
-        <div class="video-preview">
-          <img src="${thumb}" alt="">
-          <div class="title">${titleText}</div>
+      <div class="stage">
+        <div class="mode-bar">
+          <span class="current" id="modeBarLabel">アプリ内で再生</span>
+          <button class="expandBtn" id="modeExpandBtn" type="button">切替 ▾</button>
         </div>
-
-        <div class="mode-switch">
+        <div class="mode-switch" id="modeSwitch">
           <button id="modeEmbedBtn" class="active">アプリ内で再生</button>
           <button id="modeTimerBtn">外部再生+タイマー</button>
         </div>
@@ -130,7 +129,7 @@
           <div class="embed-status" id="embedStatus">再生ボタンを押して視聴を始めてください</div>
         </div>
 
-        <div id="timerSection" style="display:none;">
+        <div id="timerSection" class="stage-inner" style="display:none;">
           <div class="timer-display" id="timerDisplay">${YTKC.secondsToInputString(timerFrozenValue)}</div>
           <div class="timer-controls">
             <button id="openYoutubeBtn">▶ YouTubeで開く</button>
@@ -144,7 +143,11 @@
             <button class="stepBtn" id="timePlus" type="button">+10s</button>
           </div>
         </div>
+      </div>
 
+      <div class="stage-title" id="stageTitle">${titleText}</div>
+
+      <div class="card">
         <div class="emoji-toggle-row">
           <button id="emojiToggleBtn" type="button">😊 絵文字</button>
         </div>
@@ -169,8 +172,8 @@
       YTKC.fetchOEmbed(info.videoId).then((meta) => {
         if (meta) {
           YTKC.updateMeta(info.videoId, meta);
-          main.querySelector('.video-preview .title').textContent = meta.title || info.videoId;
-          if (meta.thumbnail) main.querySelector('.video-preview img').src = meta.thumbnail;
+          const titleEl = document.getElementById('stageTitle');
+          if (titleEl) titleEl.textContent = meta.title || info.videoId;
         }
       });
     }
@@ -184,9 +187,23 @@
 
   // ---------- モード切替 ----------
 
+  const MODE_LABELS = { embed: 'アプリ内で再生', timer: '外部再生+タイマー' };
+
   function setupModeSwitch() {
-    document.getElementById('modeEmbedBtn').addEventListener('click', () => setMode('embed'));
-    document.getElementById('modeTimerBtn').addEventListener('click', () => setMode('timer'));
+    document.getElementById('modeExpandBtn').addEventListener('click', () => {
+      const ms = document.getElementById('modeSwitch');
+      ms.classList.toggle('show');
+    });
+    document.getElementById('modeEmbedBtn').addEventListener('click', () => {
+      setMode('embed');
+      document.getElementById('modeSwitch').classList.remove('show');
+    });
+    document.getElementById('modeTimerBtn').addEventListener('click', () => {
+      setMode('timer');
+      document.getElementById('modeSwitch').classList.remove('show');
+    });
+    // 最初は選び方が分かるように開いておく
+    document.getElementById('modeSwitch').classList.add('show');
   }
 
   function setMode(newMode) {
@@ -194,6 +211,7 @@
       try { player.pauseVideo(); } catch (e) {}
     }
     mode = newMode;
+    document.getElementById('modeBarLabel').textContent = MODE_LABELS[mode];
     document.getElementById('modeEmbedBtn').classList.toggle('active', mode === 'embed');
     document.getElementById('modeTimerBtn').classList.toggle('active', mode === 'timer');
     document.getElementById('embedSection').style.display = mode === 'embed' ? 'block' : 'none';
