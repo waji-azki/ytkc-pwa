@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>感想を記録 | 配信感想メモ</title>
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#0f0f0f">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <a class="back" href="index.html">← 一覧</a>
+    <h1>感想を記録</h1>
+    <span></span>
+  </header>
+  <main id="main">
+    <div class="empty">読み込み中...</div>
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="app.js"></script>
+<script>
+  YTKC.registerSW();
+
+  const params = new URLSearchParams(location.search);
+  const rawUrl = params.get('url') || '';
+  const rawText = params.get('text') || '';
+  const rawTitle = params.get('title') || '';
+
+  let info = YTKC.extractYoutubeInfo(rawUrl) || YTKC.extractYoutubeInfo(rawText) || YTKC.extractYoutubeInfo(rawTitle);
+
+  const main = document.getElementById('main');
+
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1400);
+  }
+
+  function renderManualFallback() {
+    main.innerHTML = `
+      <div class="error-box">
+        共有された内容からYouTubeの動画リンクを見つけられませんでした。<br>
+        下にYouTubeのURLを貼り付けてください(再生時刻付きのリンクなら、その時刻も自動で読み取ります)。
+      </div>
+      <div class="add-box">
+        <input id="manualUrl" type="text" placeholder="https://www.youtube.com/watch?v=...">
+        <button id="manualBtn">読み込む</button>
+      </div>
+    `;
+    document.getElementById('manualBtn').addEventListener('click', () => {
+      const v = document.getElementById('manualUrl').value.trim();
+      const found = YTKC.extractYoutubeInfo(v);
+      if (found) {
+        info = found;
+        renderEntryForm();
+      } else {
+        showToast('URLを読み取れませんでした');
+      }
+    });
+  }
+
+  function renderEntryForm() {
+    YTKC.ensureVideo(info.videoId);
+    const video = YTKC.getVideo(info.videoId);
+    const thumb = video.thumbnail || ('https://i.ytimg.com/vi/' + info.videoId + '/mqdefault.jpg');
+    const titleText = video.title || info.videoId;
+
+    main.innerHTML = `
+      <div class="card">
+        <div class="video-preview">
+          <img src="${thumb}" alt="">
+          <div class="title">${titleText}</div>
+        </div>
+        <div class="time-row">
+          再生時刻:
+          <input id="timeInput" type="text" value="${YTKC.secondsToInputString(info.t)}">
+          <span>(mm:ss)</span>
+        </div>
+
+        <div class="emoji-grid" id="emojiGrid"></div>
+
+        <div class="text-row">
+          <input id="textInput" type="text" placeholder="感想を入力してEnter">
+          <button id="sendBtn">送信</button>
+        </div>
+
+        <button class="link-btn" id="positionOnlyBtn">コメントなしで、ここまで視聴したと記録する</button>
+      </div>
+
+      <div id="sessionLogWrap"></div>
+
+      <div class="actions-row">
+        <button id="viewLogBtn">この動画のログを見る</button>
+      </div>
+    `;
+
+    if (!video.title) {
+      YTKC.fetchOEmbed(info.videoId).then((meta) => {
+        if (meta) {
+          YTKC.updateMeta(info.videoId, meta);
+          main.querySelector('.video-preview .title').textContent = meta.title || info.videoId;
+          if (meta.thumbnail) main.querySelector('.video-preview img').src = meta.thumbnail;
+        }
+      });
+    }
+
+    const grid = document.getElementById('emojiGrid');
+    YTKC.EMOJIS.forEach((em) => {
+      const b = document.createElement('button');
+      b.textContent = em;
+      b.addEventListener('click', () => {
+        const t = YTKC.parseTimeToken(document.getElementById('timeInput').value.replace(':', 'm') + 's') 
+                  ?? YTKC.parseTimeToken(document.getElementById('timeInput').value);
+        addAndRefresh(t, 'emoji', em);
+      });
+      grid.appendChild(b);
+    });
+
+    function getCurrentT() {
+      const raw = document.getElementById('timeInput').value.trim();
+      const parts = raw.split(':').map((x) => parseInt(x, 10));
+      if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+        return parts[0] * 60 + parts[1];
+      }
+      const p = YTKC.parseTimeToken(raw);
+      return p !== null ? p : info.t;
+    }
+
+    document.getElementById('sendBtn').addEventListener('click', () => {
+      const text = document.getElementById('textInput').value.trim();
+      if (!text) return;
+      addAndRefresh(getCurrentT(), 'text', text);
+      document.getElementById('textInput').value = '';
+    });
+    document.getElementById('textInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') document.getElementById('sendBtn').click();
+    });
+    document.getElementById('positionOnlyBtn').addEventListener('click', () => {
+      YTKC.markPosition(info.videoId, getCurrentT());
+      showToast('視聴位置を記録しました');
+      renderSessionLog();
+    });
+    document.getElementById('viewLogBtn').addEventListener('click', () => {
+      location.href = 'video.html?id=' + encodeURIComponent(info.videoId);
+    });
+
+    function addAndRefresh(t, type, content) {
+      YTKC.addEntry(info.videoId, { t, type, content });
+      showToast('追加しました');
+      renderSessionLog();
+    }
+
+    renderSessionLog();
+  }
+
+  function renderSessionLog() {
+    const wrap = document.getElementById('sessionLogWrap');
+    if (!wrap) return;
+    const video = YTKC.getVideo(info.videoId);
+    const recent = video.entries.slice(-5).reverse();
+    if (recent.length === 0) {
+      wrap.innerHTML = '';
+      return;
+    }
+    wrap.innerHTML = '<div class="log" id="miniLog"></div>';
+    const log = document.getElementById('miniLog');
+    recent.forEach((e) => {
+      const row = document.createElement('div');
+      row.className = 'entry';
+      const ts = document.createElement('span');
+      ts.className = 'ts';
+      ts.textContent = YTKC.formatTime(e.t);
+      const content = document.createElement('span');
+      content.className = 'content';
+      content.textContent = e.content;
+      row.appendChild(ts);
+      row.appendChild(content);
+      log.appendChild(row);
+    });
+  }
+
+  if (info) {
+    renderEntryForm();
+  } else {
+    renderManualFallback();
+  }
+</script>
+</body>
+</html>

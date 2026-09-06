@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ログ | 配信感想メモ</title>
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#0f0f0f">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <a class="back" href="index.html">← 一覧</a>
+    <h1>感想ログ</h1>
+    <span></span>
+  </header>
+  <main id="main">
+    <div class="empty">読み込み中...</div>
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="app.js"></script>
+<script>
+  YTKC.registerSW();
+
+  const params = new URLSearchParams(location.search);
+  const videoId = params.get('id');
+  const main = document.getElementById('main');
+
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1400);
+  }
+
+  function render() {
+    const video = YTKC.getVideo(videoId);
+    if (!video) {
+      main.innerHTML = '<div class="empty">この動画の記録は見つかりませんでした。</div>';
+      return;
+    }
+    const thumb = video.thumbnail || ('https://i.ytimg.com/vi/' + videoId + '/mqdefault.jpg');
+    const titleText = video.title || videoId;
+
+    main.innerHTML = `
+      <div class="card">
+        <div class="video-preview">
+          <img src="${thumb}" alt="">
+          <div class="title">${titleText}</div>
+        </div>
+      </div>
+
+      <div class="watch-banner">
+        <span>前回はここまで視聴: ${YTKC.formatTime(video.lastWatchedAt)}</span>
+        <a href="${YTKC.buildWatchUrl(videoId, video.lastWatchedAt)}" target="_blank" rel="noopener">続きを開く</a>
+      </div>
+
+      <div class="log" id="log"></div>
+
+      <div class="emoji-grid" id="emojiGrid"></div>
+      <div class="text-row">
+        <input id="textInput" type="text" placeholder="感想を追記してEnter">
+        <button id="sendBtn">送信</button>
+      </div>
+
+      <div class="actions-row">
+        <button class="primary" id="exportBtn">送信用テキストを作成</button>
+        <button id="deleteVideoBtn">この動画の記録を削除</button>
+      </div>
+
+      <div id="exportWrap"></div>
+    `;
+
+    if (!video.title) {
+      YTKC.fetchOEmbed(videoId).then((meta) => {
+        if (meta) {
+          YTKC.updateMeta(videoId, meta);
+          main.querySelector('.video-preview .title').textContent = meta.title || videoId;
+          if (meta.thumbnail) main.querySelector('.video-preview img').src = meta.thumbnail;
+        }
+      });
+    }
+
+    renderLog();
+
+    const grid = document.getElementById('emojiGrid');
+    YTKC.EMOJIS.forEach((em) => {
+      const b = document.createElement('button');
+      b.textContent = em;
+      b.addEventListener('click', () => {
+        YTKC.addEntry(videoId, { t: video.lastWatchedAt, type: 'emoji', content: em });
+        showToast('追加しました');
+        render();
+      });
+      grid.appendChild(b);
+    });
+
+    document.getElementById('sendBtn').addEventListener('click', () => {
+      const text = document.getElementById('textInput').value.trim();
+      if (!text) return;
+      YTKC.addEntry(videoId, { t: video.lastWatchedAt, type: 'text', content: text });
+      render();
+    });
+    document.getElementById('textInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') document.getElementById('sendBtn').click();
+    });
+
+    document.getElementById('exportBtn').addEventListener('click', () => {
+      const text = YTKC.buildExportText(YTKC.getVideo(videoId));
+      const wrap = document.getElementById('exportWrap');
+      wrap.innerHTML = `
+        <div class="card">
+          <textarea class="export-area" id="exportArea" readonly>${text}</textarea>
+          <div class="actions-row">
+            <button class="primary" id="copyBtn">コピー</button>
+            <button id="shareBtn">共有</button>
+          </div>
+        </div>
+      `;
+      document.getElementById('copyBtn').addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(text);
+          showToast('コピーしました');
+        } catch (e) {
+          showToast('コピーに失敗しました');
+        }
+      });
+      document.getElementById('shareBtn').addEventListener('click', async () => {
+        if (navigator.share) {
+          try {
+            await navigator.share({ text });
+          } catch (e) {}
+        } else {
+          showToast('この端末では共有機能が使えません');
+        }
+      });
+    });
+
+    document.getElementById('deleteVideoBtn').addEventListener('click', () => {
+      if (confirm('この動画の記録をすべて削除します。よろしいですか?')) {
+        YTKC.deleteVideo(videoId);
+        location.href = 'index.html';
+      }
+    });
+  }
+
+  function renderLog() {
+    const video = YTKC.getVideo(videoId);
+    const log = document.getElementById('log');
+    log.innerHTML = '';
+    if (video.entries.length === 0) {
+      log.innerHTML = '<div class="empty">まだコメントがありません。</div>';
+      return;
+    }
+    video.entries.forEach((e) => {
+      const row = document.createElement('div');
+      row.className = 'entry';
+
+      const ts = document.createElement('a');
+      ts.className = 'ts';
+      ts.textContent = YTKC.formatTime(e.t);
+      ts.href = YTKC.buildWatchUrl(videoId, e.t);
+      ts.target = '_blank';
+      ts.rel = 'noopener';
+
+      const content = document.createElement('span');
+      content.className = 'content';
+      content.textContent = e.content;
+
+      const del = document.createElement('button');
+      del.className = 'del';
+      del.textContent = '✕';
+      del.addEventListener('click', () => {
+        YTKC.deleteEntry(videoId, e.id);
+        renderLog();
+      });
+
+      row.appendChild(ts);
+      row.appendChild(content);
+      row.appendChild(del);
+      log.appendChild(row);
+    });
+  }
+
+  if (!videoId) {
+    main.innerHTML = '<div class="empty">動画が指定されていません。</div>';
+  } else {
+    render();
+  }
+</script>
+</body>
+</html>
