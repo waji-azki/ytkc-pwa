@@ -257,9 +257,86 @@ window.YTKC = (function () {
     lines.push(`https://www.youtube.com/watch?v=${video.videoId}`);
     lines.push('');
     video.entries.forEach((e) => {
-      lines.push(`[${formatTime(e.t)}] ${e.content}`);
+      const prefix = e.source ? `(${e.source}) ` : '';
+      lines.push(`[${formatTime(e.t)}] ${prefix}${e.content}`);
     });
     return lines.join('\n');
+  }
+
+  // ---------- 送信用テキストのインポート(友人の感想を取り込む) ----------
+
+  // buildExportText と同じフォーマットのテキストを解析する
+  function parseExportText(text) {
+    if (!text) return null;
+    const lines = text.split('\n').map((l) => l.replace(/\r$/, ''));
+    let title = null;
+    let videoId = null;
+    const entries = [];
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      if (!line) continue;
+      if (!title && /^【.+】$/.test(line)) {
+        title = line.replace(/^【/, '').replace(/】$/, '');
+        continue;
+      }
+      if (!videoId) {
+        const info = extractYoutubeInfo(line);
+        if (info) {
+          videoId = info.videoId;
+          continue;
+        }
+      }
+      const m = line.match(/^\[([^\]]+)\]\s*(.*)$/);
+      if (m) {
+        const t = parseTimeToken(m[1]);
+        if (t !== null) {
+          entries.push({ t, content: m[2] });
+        }
+      }
+    }
+    if (!videoId || entries.length === 0) return null;
+    return { videoId, title, entries };
+  }
+
+  // 解析済みのentriesを、source(表示名)付きで動画の記録にマージする。重複はスキップする
+  function importEntries(videoId, entries, source) {
+    const all = loadAll();
+    if (!all[videoId]) {
+      all[videoId] = { videoId, title: null, thumbnail: null, lastWatchedAt: 0, updatedAt: Date.now(), entries: [] };
+    }
+    const video = all[videoId];
+    let addedCount = 0;
+    let skippedCount = 0;
+    entries.forEach((e) => {
+      const isDup = video.entries.some(
+        (existing) => existing.t === e.t && existing.content === e.content && (existing.source || null) === (source || null)
+      );
+      if (isDup) {
+        skippedCount++;
+        return;
+      }
+      video.entries.push({
+        id: 'e' + Date.now() + Math.random().toString(36).slice(2, 7),
+        t: e.t,
+        type: 'text',
+        content: e.content,
+        source: source || null,
+        createdAt: Date.now(),
+      });
+      addedCount++;
+    });
+    video.entries.sort((a, b) => a.t - b.t);
+    video.updatedAt = Date.now();
+    saveAll(all);
+    return { video, addedCount, skippedCount };
+  }
+
+  const SOURCE_COLORS = ['#ffab40', '#7ee787', '#ff6b9d', '#c792ea', '#4dd0e1', '#ffd54f', '#ff8a65', '#90caf9'];
+  function sourceColor(name) {
+    if (!name) return null;
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+    return SOURCE_COLORS[hash % SOURCE_COLORS.length];
   }
 
   // ---------- Service Worker登録 ----------
@@ -293,6 +370,9 @@ window.YTKC = (function () {
     clearCounterState,
     fetchOEmbed,
     buildExportText,
+    parseExportText,
+    importEntries,
+    sourceColor,
     registerSW,
   };
 })();

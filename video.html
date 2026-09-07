@@ -86,6 +86,7 @@
         <button class="primary" id="exportBtn">送信用テキストを作成</button>
         <button id="deleteVideoBtn">この動画の記録を削除</button>
       </div>
+      <a class="link-btn" href="import.html" style="display:block; margin-top:8px; text-decoration:none;">📥 友人の感想をインポート</a>
 
       <div id="exportWrap"></div>
     `;
@@ -214,6 +215,16 @@
       ts.target = '_blank';
       ts.rel = 'noopener';
 
+      row.appendChild(ts);
+
+      if (e.source) {
+        const badge = document.createElement('span');
+        badge.className = 'source-badge';
+        badge.textContent = e.source;
+        badge.style.color = YTKC.sourceColor(e.source);
+        row.appendChild(badge);
+      }
+
       const content = document.createElement('span');
       content.className = 'content';
       content.textContent = e.content;
@@ -226,7 +237,6 @@
         renderLog();
       });
 
-      row.appendChild(ts);
       row.appendChild(content);
       row.appendChild(del);
       log.appendChild(row);

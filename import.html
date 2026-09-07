@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>感想をインポート | 配信感想メモ</title>
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#0f0f0f">
+<link rel="stylesheet" href="style.css">
+<style>
+  textarea.import-area {
+    width: 100%;
+    min-height: 220px;
+    background: #121212;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 13px;
+    padding: 10px;
+    margin-bottom: 10px;
+  }
+  .name-row {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+  .name-row input {
+    flex: 1;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    color: var(--text);
+    font-size: 13px;
+  }
+  .result-box {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px;
+    margin-top: 14px;
+    font-size: 13px;
+    line-height: 1.7;
+  }
+  .result-box a {
+    display: inline-block;
+    margin-top: 8px;
+    color: var(--accent);
+    font-weight: 700;
+    text-decoration: none;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <a class="back" href="index.html">← 一覧</a>
+    <h1>感想をインポート</h1>
+    <span></span>
+  </header>
+  <main>
+    <p style="font-size:12px; color:var(--sub); line-height:1.7; margin-top:0;">
+      友人がこのアプリの「送信用テキストを作成」で作ったテキストを貼り付けると、同じ動画のログに友人の感想を取り込めます(名前を付けて区別されます)。
+    </p>
+
+    <div class="name-row">
+      <input id="nameInput" type="text" placeholder="だれのコメント?(例: たかし)">
+    </div>
+
+    <textarea class="import-area" id="importArea" placeholder="【動画タイトル】&#10;https://www.youtube.com/watch?v=...&#10;&#10;[12:34] コメント&#10;..."></textarea>
+
+    <button class="primary" id="importBtn" style="width:100%; padding:12px; border-radius:8px;">取り込む</button>
+
+    <div id="resultWrap"></div>
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="app.js"></script>
+<script>
+  YTKC.registerSW();
+
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1400);
+  }
+
+  document.getElementById('importBtn').addEventListener('click', () => {
+    const text = document.getElementById('importArea').value.trim();
+    const name = document.getElementById('nameInput').value.trim();
+
+    if (!name) {
+      showToast('だれのコメントか入力してください');
+      return;
+    }
+    if (!text) {
+      showToast('テキストを貼り付けてください');
+      return;
+    }
+
+    const parsed = YTKC.parseExportText(text);
+    const resultWrap = document.getElementById('resultWrap');
+
+    if (!parsed) {
+      resultWrap.innerHTML = `
+        <div class="error-box">
+          解析できませんでした。「送信用テキストを作成」で出力したテキストそのままの形式で貼り付けてください。
+        </div>
+      `;
+      return;
+    }
+
+    YTKC.ensureVideo(parsed.videoId);
+    if (parsed.title) {
+      const existing = YTKC.getVideo(parsed.videoId);
+      if (!existing.title) YTKC.updateMeta(parsed.videoId, { title: parsed.title });
+    }
+
+    const { addedCount, skippedCount } = YTKC.importEntries(parsed.videoId, parsed.entries, name);
+
+    resultWrap.innerHTML = `
+      <div class="result-box">
+        ${addedCount}件を取り込みました${skippedCount > 0 ? `(${skippedCount}件は既に取り込み済みでした)` : ''}。<br>
+        <a href="video.html?id=${encodeURIComponent(parsed.videoId)}">ログを見る →</a>
+      </div>
+    `;
+    document.getElementById('importArea').value = '';
+    showToast('取り込みました');
+  });
+</script>
+</body>
+</html>

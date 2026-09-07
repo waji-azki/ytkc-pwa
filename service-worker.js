@@ -5,6 +5,7 @@ const ASSETS = [
   './share.html',
   './video.html',
   './watch.html',
+  './import.html',
   './style.css',
   './app.js',
   './manifest.json',
